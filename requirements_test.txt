@@ -1,3 +1,5 @@
 pytest>=9.0.3
+pytest-asyncio>=0.24.0
 requests>=2.32.3
 homeassistant>=2026.4.4
+pytest-homeassistant-custom-component>=0.13.138

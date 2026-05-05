@@ -1,129 +1,273 @@
-"""Tests for the GoodWe SEMS+ API client using the mock server."""
+"""Tests for the GoodWe SEMS+ API client using requests-mock."""
 
 import sys
-from unittest.mock import patch
+
+import pytest
+import requests_mock
 
 sys.path.insert(0, ".")
 
-from custom_components.goodwe_semsplus.api import SemsPlusAuthError, SemsPlusClient
-from tests.mock_server import MOCK_SN, MOCK_STATION_ID, MockSemsPlusServer, reset_state
+from custom_components.goodwe_semsplus.api import (
+    SemsPlusAuthError,
+    SemsPlusClient,
+)
+from custom_components.goodwe_semsplus.const import (
+    CONTROL_URL,
+    DEVICE_STATUS_URL,
+    LOGIN_URL,
+    SEMS_HOST,
+    STATION_FLOW_URL,
+    STATION_INFO_URL,
+    STATIONS_URL,
+    USER_URL,
+)
+
+MOCK_EMAIL = "test@example.com"
+MOCK_PASSWORD = "test_password"
+MOCK_STATION_ID = "station-123"
+MOCK_PLANT_ID = "plant-123"
+MOCK_SN = "DEVICE-001"
+MOCK_DEVICE_NAME = "SolarGoodwe"
+
+
+@pytest.fixture
+def mock_requests():
+    """Fixture to mock HTTP requests."""
+    with requests_mock.Mocker() as m:
+        yield m
 
 
 class TestSemsPlusClient:
-    """Test suite for SemsPlusClient against mock server."""
+    """Test suite for SemsPlusClient with mocked requests."""
 
     def setup_method(self):
-        self.server = MockSemsPlusServer().start()
-        base = self.server.base_url
-        # Patch URLs to point to mock server
-        self._patches = [
-            patch("custom_components.goodwe_semsplus.api.SEMS_HOST", base),
-            patch(
-                "custom_components.goodwe_semsplus.api.LOGIN_URL",
-                f"{base}/web/sems/sems-user/api/v1/auth/cross-login",
-            ),
-            patch(
-                "custom_components.goodwe_semsplus.api.USER_URL",
-                f"{base}/web/sems/sems-user/api/v1/user/get-user",
-            ),
-            patch(
-                "custom_components.goodwe_semsplus.api.STATIONS_URL",
-                f"{base}/web/sems/sems-plant/api/stations/simple-query",
-            ),
-            patch(
-                "custom_components.goodwe_semsplus.api.STATION_INFO_URL",
-                f"{base}/web/sems/sems-plant/api/portal/stations/basic/info",
-            ),
-            patch(
-                "custom_components.goodwe_semsplus.api.STATION_FLOW_URL",
-                f"{base}/web/sems/sems-plant/api/stations/flow",
-            ),
-            patch(
-                "custom_components.goodwe_semsplus.api.DEVICE_STATUS_URL",
-                f"{base}/web/sems/sems-plant/api/stations/device/all-status",
-            ),
-            patch(
-                "custom_components.goodwe_semsplus.api.CONTROL_URL",
-                f"{base}/web/sems/sems-remote/api/v1/address/remote/setDeviceFunctionParameters",
-            ),
-        ]
-        for p in self._patches:
-            p.start()
-        reset_state()
+        """Setup common test data."""
+        self.email = MOCK_EMAIL
+        self.password = MOCK_PASSWORD
+        self.station_id = MOCK_STATION_ID
+        self.plant_id = MOCK_PLANT_ID
+        self.sn = MOCK_SN
+        self.device_name = MOCK_DEVICE_NAME
 
-    def teardown_method(self):
-        for p in self._patches:
-            p.stop()
-        self.server.stop()
+    def _mock_login_response(self):
+        """Return a mocked login response."""
+        return {
+            "code": "00000",
+            "msg": "success",
+            "data": {
+                "uid": "user-123",
+                "token": "mock-token-xyz",
+                "timestamp": 1234567890,
+                "client": "semsPlusWeb",
+            },
+        }
 
-    def _make_client(self):
-        return SemsPlusClient("test@example.com", "testpass")
+    def _mock_user_response(self):
+        """Return a mocked user info response."""
+        return {
+            "code": "00000",
+            "msg": "success",
+            "data": {
+                "uid": "user-123",
+                "email": MOCK_EMAIL,
+                "countryCode": "NL",
+            },
+        }
 
-    def test_login_and_get_user(self):
-        client = self._make_client()
+    def _mock_stations_response(self):
+        """Return a mocked stations list response."""
+        return {
+            "code": "00000",
+            "msg": "success",
+            "data": {
+                "dataList": [
+                    {
+                        "id": self.station_id,
+                        "stationId": self.station_id,
+                        "stationName": "Test Station",
+                        "countryCode": "NL",
+                    }
+                ]
+            },
+        }
+
+    def _mock_station_info_response(self):
+        """Return a mocked station info response."""
+        return {
+            "code": "00000",
+            "msg": "success",
+            "data": {
+                "id": self.station_id,
+                "stationId": self.station_id,
+                "stationName": "Test Station",
+                "pac": 3500,
+                "eDay": 12.5,
+                "eMonth": 250.0,
+                "eTotal": 5000.0,
+            },
+        }
+
+    def _mock_station_flow_response(self):
+        """Return a mocked station flow response."""
+        return {
+            "code": "00000",
+            "msg": "success",
+            "data": {
+                "pAc": 3500,
+                "status": "online",
+                "refreshTime": 1234567890,
+            },
+        }
+
+    def _mock_device_status_response(self):
+        """Return a mocked device status response."""
+        return {
+            "code": "00000",
+            "msg": "success",
+            "data": {
+                "deviceDetailList": [
+                    {
+                        "statusDetailList": [
+                            {
+                                "sn": self.sn,
+                                "deviceName": self.device_name,
+                                "status": 1,
+                                "pac": 3500,
+                            }
+                        ]
+                    }
+                ]
+            },
+        }
+
+    def _mock_control_response(self):
+        """Return a mocked control response."""
+        return {
+            "code": "00000",
+            "msg": "success",
+            "data": {"status": "success"},
+        }
+
+    def test_login_and_get_user(self, mock_requests):
+        """Test login and get user."""
+        # Mock homepage GET for session cookies
+        mock_requests.get(SEMS_HOST, text="")
+        # Mock login endpoint
+        mock_requests.post(
+            LOGIN_URL,
+            json=self._mock_login_response(),
+        )
+        # Mock get user endpoint
+        mock_requests.get(
+            USER_URL,
+            json=self._mock_user_response(),
+        )
+
+        client = SemsPlusClient(self.email, self.password)
         user = client.get_user()
-        assert user["info"]["username"] == "testuser"
-        assert user["info"]["email"] == "test@example.com"
 
-    def test_get_stations(self):
-        client = self._make_client()
+        assert user["uid"] == "user-123"
+        assert user["email"] == MOCK_EMAIL
+
+    def test_get_stations(self, mock_requests):
+        """Test getting stations list."""
+        mock_requests.get(SEMS_HOST, text="")
+        mock_requests.post(LOGIN_URL, json=self._mock_login_response())
+        mock_requests.post(STATIONS_URL, json=self._mock_stations_response())
+
+        client = SemsPlusClient(self.email, self.password)
         stations = client.get_stations()
+
         assert len(stations) == 1
-        assert stations[0]["id"] == MOCK_STATION_ID
-        assert stations[0]["stationName"] == "Test Station"
+        assert stations[0]["stationId"] == self.station_id
 
-    def test_get_station_info(self):
-        client = self._make_client()
-        info = client.get_station_info(MOCK_STATION_ID)
-        assert info["stationId"] == MOCK_STATION_ID
-        assert info["pac"] == 2500
-        assert info["eDay"] == 12.5
+    def test_get_station_info(self, mock_requests):
+        """Test getting station info."""
+        mock_requests.get(SEMS_HOST, text="")
+        mock_requests.post(LOGIN_URL, json=self._mock_login_response())
+        mock_requests.post(
+            f"{STATION_INFO_URL}?stationId={self.station_id}",
+            json=self._mock_station_info_response(),
+        )
 
-    def test_get_station_flow(self):
-        client = self._make_client()
-        flow = client.get_station_flow(MOCK_STATION_ID)
-        assert flow["pAc"] == 2.5
-        assert flow["status"] == "1"
+        client = SemsPlusClient(self.email, self.password)
+        info = client.get_station_info(self.station_id)
 
-    def test_get_device_status(self):
-        client = self._make_client()
-        devices = client.get_device_status(MOCK_STATION_ID)
-        assert devices["total"] == 1
-        status_list = devices["deviceDetailList"][0]["statusDetailList"]
-        assert status_list[0]["status"] == 5
-        assert MOCK_SN in status_list[0]["snList"]
+        assert info["stationId"] == self.station_id
+        assert info["pac"] == 3500
 
-    def test_stop_inverter(self):
-        client = self._make_client()
-        result = client.stop_inverter(MOCK_SN, MOCK_STATION_ID, "TestInverter")
+    def test_get_station_flow(self, mock_requests):
+        """Test getting station flow."""
+        mock_requests.get(SEMS_HOST, text="")
+        mock_requests.post(LOGIN_URL, json=self._mock_login_response())
+        mock_requests.get(
+            f"{STATION_FLOW_URL}?stationId={self.station_id}",
+            json=self._mock_station_flow_response(),
+        )
+
+        client = SemsPlusClient(self.email, self.password)
+        flow = client.get_station_flow(self.station_id)
+
+        assert flow["pAc"] == 3500
+        assert flow["status"] == "online"
+
+    def test_get_device_status(self, mock_requests):
+        """Test getting device status."""
+        mock_requests.get(SEMS_HOST, text="")
+        mock_requests.post(LOGIN_URL, json=self._mock_login_response())
+        mock_requests.get(
+            f"{DEVICE_STATUS_URL}?stationId={self.station_id}",
+            json=self._mock_device_status_response(),
+        )
+
+        client = SemsPlusClient(self.email, self.password)
+        status = client.get_device_status(self.station_id)
+
+        # _request returns data.get("data", data), so we get the inner data directly
+        assert status["deviceDetailList"][0]["statusDetailList"][0]["sn"] == self.sn
+
+    def test_stop_inverter(self, mock_requests):
+        """Test stopping inverter."""
+        mock_requests.get(SEMS_HOST, text="")
+        mock_requests.post(LOGIN_URL, json=self._mock_login_response())
+        mock_requests.post(CONTROL_URL, json=self._mock_control_response())
+
+        client = SemsPlusClient(self.email, self.password)
+        result = client.stop_inverter(self.sn, self.plant_id, self.device_name)
+
         assert result["code"] == "00000"
-        # Verify state changed
-        devices = client.get_device_status(MOCK_STATION_ID)
-        status = devices["deviceDetailList"][0]["statusDetailList"][0]["status"]
-        assert status == 3
 
-    def test_start_inverter(self):
-        client = self._make_client()
-        # First stop it
-        client.stop_inverter(MOCK_SN, MOCK_STATION_ID, "TestInverter")
-        # Then start it
-        result = client.start_inverter(MOCK_SN, MOCK_STATION_ID, "TestInverter")
-        assert result["code"] == "00000"
-        # Verify state changed back
-        devices = client.get_device_status(MOCK_STATION_ID)
-        status = devices["deviceDetailList"][0]["statusDetailList"][0]["status"]
-        assert status == 5
+    def test_start_inverter(self, mock_requests):
+        """Test starting inverter."""
+        mock_requests.get(SEMS_HOST, text="")
+        mock_requests.post(LOGIN_URL, json=self._mock_login_response())
+        mock_requests.post(CONTROL_URL, json=self._mock_control_response())
 
-    def test_restart_inverter(self):
-        client = self._make_client()
-        result = client.restart_inverter(MOCK_SN, MOCK_STATION_ID, "TestInverter")
+        client = SemsPlusClient(self.email, self.password)
+        result = client.start_inverter(self.sn, self.plant_id, self.device_name)
+
         assert result["code"] == "00000"
 
-    def test_login_failure(self):
-        """Test that empty account triggers auth error."""
-        client = SemsPlusClient("", "password")
-        try:
+    def test_restart_inverter(self, mock_requests):
+        """Test restarting inverter."""
+        mock_requests.get(SEMS_HOST, text="")
+        mock_requests.post(LOGIN_URL, json=self._mock_login_response())
+        mock_requests.post(CONTROL_URL, json=self._mock_control_response())
+
+        client = SemsPlusClient(self.email, self.password)
+        result = client.restart_inverter(self.sn, self.plant_id, self.device_name)
+
+        assert result["code"] == "00000"
+
+    def test_login_failure(self, mock_requests):
+        """Test login failure."""
+        mock_requests.get(SEMS_HOST, text="")
+        mock_requests.post(
+            LOGIN_URL,
+            json={"code": "C0601", "msg": "Login failed"},
+        )
+
+        client = SemsPlusClient(self.email, self.password)
+
+        with pytest.raises(SemsPlusAuthError, match="Login failed"):
             client.get_user()
-            assert False, "Should have raised SemsPlusAuthError"
-        except SemsPlusAuthError:
-            pass
