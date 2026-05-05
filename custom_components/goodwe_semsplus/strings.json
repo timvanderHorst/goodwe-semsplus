@@ -1,0 +1,18 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "GoodWe SEMS+ Login",
+        "description": "Enter your SEMS+ account credentials.",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid email or password",
+      "unknown": "Unexpected error occurred"
+    }
+  }
+}
