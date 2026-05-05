@@ -21,12 +21,9 @@ DEVICE_STATUS_URL = f"{API_BASE}/sems-plant/api/stations/device/all-status"
 CONTROL_URL = f"{API_BASE}/sems-remote/api/v1/address/remote/setDeviceFunctionParameters"
 
 SCAN_INTERVAL_SECONDS = 30
+MAX_REAUTHENTICATION_ATTEMPTS = 3  # Maximum times to re-authenticate per request
 
 DEVICE_STATUS_MAP = {
-    0: "offline",
-    1: "online",
-    2: "alarm",
     3: "stopped",
     5: "online",
-    -1: "disconnected",
 }

@@ -8,6 +8,7 @@ import requests_mock
 sys.path.insert(0, ".")
 
 from custom_components.goodwe_semsplus.api import (
+    SemsPlusApiError,
     SemsPlusAuthError,
     SemsPlusClient,
 )
@@ -15,6 +16,7 @@ from custom_components.goodwe_semsplus.const import (
     CONTROL_URL,
     DEVICE_STATUS_URL,
     LOGIN_URL,
+    MAX_REAUTHENTICATION_ATTEMPTS,
     SEMS_HOST,
     STATION_FLOW_URL,
     STATION_INFO_URL,
@@ -270,4 +272,23 @@ class TestSemsPlusClient:
         client = SemsPlusClient(self.email, self.password)
 
         with pytest.raises(SemsPlusAuthError, match="Login failed"):
+            client.get_user()
+
+    def test_max_reauthentication_attempts_exceeded(self, mock_requests):
+        """Test that exceeding max reauthentication attempts raises error."""
+        mock_requests.get(SEMS_HOST, text="")
+        mock_requests.post(LOGIN_URL, json=self._mock_login_response())
+        # Mock USER_URL to return C0602 (token expired)
+        mock_requests.get(USER_URL, json={"code": "C0602", "msg": "Token expired"})
+
+        client = SemsPlusClient(self.email, self.password)
+        # Establish initial session by making one call
+        with pytest.raises(SemsPlusApiError):
+            client.get_user()  # First call gets C0602, increments counter
+
+        # Now set counter to max to test the limit check on next request
+        client._reauthentication_attempts = MAX_REAUTHENTICATION_ATTEMPTS
+
+        # This should raise SemsPlusApiError about max attempts exceeded
+        with pytest.raises(SemsPlusApiError, match="Max reauthentication attempts"):
             client.get_user()

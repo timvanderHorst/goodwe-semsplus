@@ -12,6 +12,7 @@ from .const import (
     CONTROL_URL,
     DEVICE_STATUS_URL,
     LOGIN_URL,
+    MAX_REAUTHENTICATION_ATTEMPTS,
     SEMS_HOST,
     STATION_FLOW_URL,
     STATION_INFO_URL,
@@ -91,6 +92,8 @@ class SemsPlusClient:
         self._session: requests.Session | None = None
         self._token_json: str = ""
         self._token_expiry: float = 0
+        self._reauthentication_attempts: int = 0
+        _LOGGER.debug("SemsPlusClient initialized for %s", email)
 
     def _authenticate(self) -> None:
         """Perform login using pure requests to obtain API token."""
@@ -154,7 +157,8 @@ class SemsPlusClient:
         self._token_json = token_json
         # Token valid for ~6 hours, refresh at 5
         self._token_expiry = time.time() + 5 * 3600
-        _LOGGER.info("SEMS+ authentication successful, token expires in 5 hours")
+        self._reauthentication_attempts = 0  # Reset counter on successful auth
+        _LOGGER.info("SEMS+ authentication successful, token expires in 5 hours, reauthentication attempts reset to 0")
 
     def _ensure_session(self) -> requests.Session:
         """Ensure we have a valid session, re-authenticating if needed."""
@@ -186,8 +190,23 @@ class SemsPlusClient:
         code = data.get("code", "")
         _LOGGER.debug("API response code: %s", code)
         if code == "C0602":
-            # Token expired, re-auth and retry once
-            _LOGGER.warning("Token expired (C0602), re-authenticating and retrying request")
+            # Token expired, re-auth and retry with limit
+            self._reauthentication_attempts += 1
+            _LOGGER.warning(
+                "Token expired (C0602), reauthentication attempt %d of %d",
+                self._reauthentication_attempts,
+                MAX_REAUTHENTICATION_ATTEMPTS,
+            )
+            if self._reauthentication_attempts > MAX_REAUTHENTICATION_ATTEMPTS:
+                _LOGGER.error(
+                    "Max reauthentication attempts (%d) exceeded for request %s %s",
+                    MAX_REAUTHENTICATION_ATTEMPTS,
+                    method,
+                    url,
+                )
+                raise SemsPlusApiError(
+                    f"Max reauthentication attempts ({MAX_REAUTHENTICATION_ATTEMPTS}) exceeded: {data}"
+                )
             self._authenticate()
             token_json = self._session.headers.get("token", "")
             headers.update(_gateway_headers(token_json))
@@ -201,6 +220,14 @@ class SemsPlusClient:
         if code not in ("00000", 0, 200, "200"):
             _LOGGER.error("API error %s: %s", code, data)
             raise SemsPlusApiError(f"API error {code}: {data}")
+
+        # Reset reauthentication counter on successful response
+        if self._reauthentication_attempts > 0:
+            _LOGGER.debug(
+                "Resetting reauthentication attempts from %d to 0 after successful response",
+                self._reauthentication_attempts,
+            )
+            self._reauthentication_attempts = 0
 
         _LOGGER.debug("API request successful, returning data")
         return data.get("data", data)
