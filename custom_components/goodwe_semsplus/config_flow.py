@@ -70,12 +70,16 @@ class GoodWeSemsPlusConfigFlow(ConfigFlow, domain=DOMAIN):
 class GoodWeSemsPlusOptionsFlow(OptionsFlow):
     """Handle options for GoodWe SEMS+."""
 
+    def __init__(self, config_entry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
+
     async def async_step_init(self, user_input: dict | None = None) -> ConfigFlowResult:
         """Handle options step."""
         _LOGGER.debug("Options flow init step started")
         if user_input is not None:
             _LOGGER.debug("Saving options: %s", user_input)
-            return self.async_abort_entry_configured()
+            return self.async_create_entry(title="", data=user_input)
 
         current_delay = self.config_entry.options.get(CONF_COMMAND_DELAY, DEFAULT_COMMAND_DELAY)
         _LOGGER.debug("Current command delay setting: %d seconds", current_delay)
