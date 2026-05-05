@@ -272,9 +272,7 @@ class TestSemsPlusControlButton:
 
         # Mock the hass executor to raise an error
         mock_hass = MagicMock()
-        mock_hass.async_add_executor_job = AsyncMock(
-            side_effect=Exception("API Error")
-        )
+        mock_hass.async_add_executor_job = AsyncMock(side_effect=Exception("API Error"))
         button.hass = mock_hass
 
         # Verify exception is raised

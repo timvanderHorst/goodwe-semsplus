@@ -77,9 +77,7 @@ class GoodWeSemsPlusOptionsFlow(OptionsFlow):
             _LOGGER.debug("Saving options: %s", user_input)
             return self.async_abort_entry_configured()
 
-        current_delay = self.config_entry.options.get(
-            CONF_COMMAND_DELAY, DEFAULT_COMMAND_DELAY
-        )
+        current_delay = self.config_entry.options.get(CONF_COMMAND_DELAY, DEFAULT_COMMAND_DELAY)
         _LOGGER.debug("Current command delay setting: %d seconds", current_delay)
 
         options_schema = vol.Schema(

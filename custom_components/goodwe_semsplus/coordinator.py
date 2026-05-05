@@ -16,7 +16,9 @@ class SemsPlusCoordinator(DataUpdateCoordinator):
     """Coordinator to fetch data from SEMS+ API."""
 
     def __init__(self, hass: HomeAssistant, client: SemsPlusClient) -> None:
-        _LOGGER.debug("Initializing SemsPlusCoordinator with scan interval: %d seconds", SCAN_INTERVAL_SECONDS)
+        _LOGGER.debug(
+            "Initializing SemsPlusCoordinator with scan interval: %d seconds", SCAN_INTERVAL_SECONDS
+        )
         super().__init__(
             hass,
             _LOGGER,
@@ -46,12 +48,20 @@ class SemsPlusCoordinator(DataUpdateCoordinator):
                 station_info = await self.hass.async_add_executor_job(
                     self.client.get_station_info, station_id
                 )
-                _LOGGER.debug("Retrieved station info for %s: %s", station_id, list(station_info.keys()) if isinstance(station_info, dict) else type(station_info))
+                _LOGGER.debug(
+                    "Retrieved station info for %s: %s",
+                    station_id,
+                    list(station_info.keys())
+                    if isinstance(station_info, dict)
+                    else type(station_info),
+                )
 
                 device_data = await self.hass.async_add_executor_job(
                     self.client.get_device_status, station_id
                 )
-                _LOGGER.debug("Retrieved device data for %s: type=%s", station_id, type(device_data))
+                _LOGGER.debug(
+                    "Retrieved device data for %s: type=%s", station_id, type(device_data)
+                )
 
                 # Extract device list from nested response
                 devices = []
@@ -69,8 +79,11 @@ class SemsPlusCoordinator(DataUpdateCoordinator):
                     "name": station.get("stationName", station_id),
                 }
 
-            _LOGGER.info("Data update complete: %d stations with %d total devices",
-                        len(data["stations"]), sum(len(s["devices"]) for s in data["stations"].values()))
+            _LOGGER.info(
+                "Data update complete: %d stations with %d total devices",
+                len(data["stations"]),
+                sum(len(s["devices"]) for s in data["stations"].values()),
+            )
             return data
 
         except SemsPlusAuthError as err:

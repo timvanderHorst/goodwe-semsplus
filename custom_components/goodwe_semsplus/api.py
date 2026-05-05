@@ -135,7 +135,11 @@ class SemsPlusClient:
             )
             r.raise_for_status()
             resp = r.json()
-            _LOGGER.debug("Login response received: status_code=%d, response_keys=%s", r.status_code, list(resp.keys()))
+            _LOGGER.debug(
+                "Login response received: status_code=%d, response_keys=%s",
+                r.status_code,
+                list(resp.keys()),
+            )
         except requests.RequestException as err:
             _LOGGER.error("Login request failed: %s", err, exc_info=True)
             raise SemsPlusAuthError(f"Login request failed: {err}") from err
@@ -143,7 +147,7 @@ class SemsPlusClient:
         code = resp.get("code", resp.get("status", -1))
         _LOGGER.debug("Login response code: %s", code)
         if code not in (0, 200, "00000", "200"):
-            msg = resp.get('msg', resp)
+            msg = resp.get("msg", resp)
             _LOGGER.error("Login failed with code %s: %s", code, msg)
             raise SemsPlusAuthError(f"Login failed (code {code}): {msg}")
 
@@ -158,7 +162,9 @@ class SemsPlusClient:
         # Token valid for ~6 hours, refresh at 5
         self._token_expiry = time.time() + 5 * 3600
         self._reauthentication_attempts = 0  # Reset counter on successful auth
-        _LOGGER.info("SEMS+ authentication successful, token expires in 5 hours, reauthentication attempts reset to 0")
+        _LOGGER.info(
+            "SEMS+ authentication successful, token expires in 5 hours, reauthentication attempts reset to 0"
+        )
 
     def _ensure_session(self) -> requests.Session:
         """Ensure we have a valid session, re-authenticating if needed."""
