@@ -23,7 +23,7 @@ jobs:
             .github/workflows/*.yml
 
       - name: Create pull request
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: chore/ratchet-pin-actions
           title: "chore(ci): ratchet pin action versions"
