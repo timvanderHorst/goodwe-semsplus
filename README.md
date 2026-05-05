@@ -26,6 +26,12 @@ This integration is installed through HACS as a custom repository.
 10. Search for `GoodWe SEMS+` and add it.
 11. Enter your SEMS+ account email and password.
 
+### Version requirement for HACS
+
+- HACS expects a valid version in `custom_components/goodwe_semsplus/manifest.json`.
+- Create a GitHub release tag that matches the manifest version (for example `v0.2.0` for version `0.2.0`).
+- If HACS shows "The version can not be used with HACS", verify the manifest version format and that a matching release tag exists.
+
 ## Manual installation (alternative)
 
 1. Copy `custom_components/goodwe_semsplus` into your Home Assistant `config/custom_components` folder.
