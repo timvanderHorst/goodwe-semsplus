@@ -495,7 +495,7 @@ class TestIntegrationSetup:
         # Verify entity attributes
         assert button._attr_name == "SolarGoodwe Stop"
         assert button._attr_unique_id == "DEVICE-001_stop"
-        assert button._attr_entity_category is not None
+        assert button._attr_entity_registry_enabled_default is True
 
         # Verify restart action has device class
         button_restart = SemsPlusControlButton(
