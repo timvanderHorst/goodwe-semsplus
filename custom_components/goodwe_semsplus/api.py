@@ -94,7 +94,7 @@ class SemsPlusClient:
 
     def _authenticate(self) -> None:
         """Perform login using pure requests to obtain API token."""
-        _LOGGER.debug("Authenticating with SEMS+ via requests")
+        _LOGGER.debug("Starting SEMS+ authentication for account: %s", self._email)
 
         session = requests.Session()
         session.headers.update(
@@ -106,9 +106,12 @@ class SemsPlusClient:
                 "Referer": f"{SEMS_HOST}/",
             }
         )
+        _LOGGER.debug("Session headers configured")
 
         # Visit homepage to get session cookies
+        _LOGGER.debug("Fetching homepage to establish session cookies from %s", SEMS_HOST)
         session.get(SEMS_HOST, timeout=30)
+        _LOGGER.debug("Homepage fetch complete, session cookies established")
 
         payload = {
             "account": self._email,
@@ -117,8 +120,10 @@ class SemsPlusClient:
             "isChinese": False,
             "isLocal": False,
         }
+        _LOGGER.debug("Login payload prepared (pwd hash generated)")
 
         try:
+            _LOGGER.debug("Sending login request to %s", LOGIN_URL)
             r = session.post(
                 LOGIN_URL,
                 json=payload,
@@ -127,28 +132,41 @@ class SemsPlusClient:
             )
             r.raise_for_status()
             resp = r.json()
+            _LOGGER.debug("Login response received: status_code=%d, response_keys=%s", r.status_code, list(resp.keys()))
         except requests.RequestException as err:
+            _LOGGER.error("Login request failed: %s", err, exc_info=True)
             raise SemsPlusAuthError(f"Login request failed: {err}") from err
 
         code = resp.get("code", resp.get("status", -1))
+        _LOGGER.debug("Login response code: %s", code)
         if code not in (0, 200, "00000", "200"):
-            raise SemsPlusAuthError(f"Login failed (code {code}): {resp.get('msg', resp)}")
+            msg = resp.get('msg', resp)
+            _LOGGER.error("Login failed with code %s: %s", code, msg)
+            raise SemsPlusAuthError(f"Login failed (code {code}): {msg}")
 
         data = resp.get("data", {})
         data["client"] = "semsPlusWeb"
         token_json = json.dumps(data, separators=(",", ":"))
+        _LOGGER.debug("Token JSON constructed: length=%d", len(token_json))
 
         session.headers.update({"token": token_json})
         self._session = session
         self._token_json = token_json
         # Token valid for ~6 hours, refresh at 5
         self._token_expiry = time.time() + 5 * 3600
-        _LOGGER.info("SEMS+ authentication successful")
+        _LOGGER.info("SEMS+ authentication successful, token expires in 5 hours")
 
     def _ensure_session(self) -> requests.Session:
         """Ensure we have a valid session, re-authenticating if needed."""
-        if self._session is None or time.time() > self._token_expiry:
+        if self._session is None:
+            _LOGGER.debug("No session exists, authenticating")
             self._authenticate()
+        elif time.time() > self._token_expiry:
+            _LOGGER.debug("Token expired (expiry: %s), re-authenticating", self._token_expiry)
+            self._authenticate()
+        else:
+            remaining = self._token_expiry - time.time()
+            _LOGGER.debug("Using existing session, token valid for %.0f seconds", remaining)
         return self._session
 
     def _request(self, method: str, url: str, **kwargs) -> dict:
@@ -166,20 +184,25 @@ class SemsPlusClient:
             raise SemsPlusApiError(f"Request to {url} failed: {err}") from err
 
         code = data.get("code", "")
+        _LOGGER.debug("API response code: %s", code)
         if code == "C0602":
             # Token expired, re-auth and retry once
-            _LOGGER.debug("Token expired, re-authenticating")
+            _LOGGER.warning("Token expired (C0602), re-authenticating and retrying request")
             self._authenticate()
             token_json = self._session.headers.get("token", "")
             headers.update(_gateway_headers(token_json))
+            _LOGGER.debug("Retrying request after token refresh: %s %s", method, url)
             resp = self._session.request(method, url, headers=headers, timeout=15, **kwargs)
             resp.raise_for_status()
             data = resp.json()
             code = data.get("code", "")
+            _LOGGER.debug("Retry response code: %s", code)
 
         if code not in ("00000", 0, 200, "200"):
+            _LOGGER.error("API error %s: %s", code, data)
             raise SemsPlusApiError(f"API error {code}: {data}")
 
+        _LOGGER.debug("API request successful, returning data")
         return data.get("data", data)
 
     def get_user(self) -> dict:

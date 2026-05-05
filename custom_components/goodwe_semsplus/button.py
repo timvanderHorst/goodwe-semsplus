@@ -23,15 +23,18 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up SEMS+ buttons from a config entry."""
+    _LOGGER.debug("Setting up SEMS+ button platform for entry: %s", entry.entry_id)
     coordinator: SemsPlusCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     # Get command delay from options or use default
     command_delay = entry.options.get(CONF_COMMAND_DELAY, DEFAULT_COMMAND_DELAY)
+    _LOGGER.debug("Command delay configured: %d seconds", command_delay)
 
     entities: list[ButtonEntity] = []
 
     for station_id, station_data in coordinator.data.get("stations", {}).items():
         station_name = station_data.get("name", station_id)
+        _LOGGER.debug("Processing station: %s (%s)", station_id, station_name)
 
         # Device-level control buttons (inverters)
         for device in station_data.get("devices", []):
@@ -39,11 +42,13 @@ async def async_setup_entry(
             device_name = device.get("deviceName", device_sn)
 
             if not device_sn:
+                _LOGGER.debug("Skipping device without serial number: %s", device_name)
                 continue
 
             # Get plant_id from station info
             station_info = station_data.get("info", {})
             plant_id = station_info.get("id") or station_info.get("stationId", station_id)
+            _LOGGER.debug("Creating buttons for device: %s (sn=%s, plant_id=%s)", device_name, device_sn, plant_id)
 
             # Create stop button
             entities.append(
@@ -87,7 +92,9 @@ async def async_setup_entry(
                 )
             )
 
+    _LOGGER.debug("Adding %d button entities to Home Assistant", len(entities))
     async_add_entities(entities)
+    _LOGGER.info("Button platform setup complete: %d entities added", len(entities))
 
 
 class SemsPlusControlButton(CoordinatorEntity, ButtonEntity):
@@ -116,6 +123,7 @@ class SemsPlusControlButton(CoordinatorEntity, ButtonEntity):
         self._action = action
         self._command_delay = command_delay
         self._command_sent_time: datetime | None = None
+        _LOGGER.debug("Initializing button: device=%s, action=%s, delay=%d", device_sn, action, command_delay)
 
         # Set device class based on action
         if action == "restart":
@@ -126,6 +134,7 @@ class SemsPlusControlButton(CoordinatorEntity, ButtonEntity):
         action_title = action.capitalize()
         self._attr_name = f"{device_name} {action_title}"
         self._attr_unique_id = f"{device_sn}_{action}"
+        _LOGGER.debug("Button entity created: unique_id=%s, name=%s", self._attr_unique_id, self._attr_name)
 
     @property
     def device_info(self):
@@ -145,7 +154,11 @@ class SemsPlusControlButton(CoordinatorEntity, ButtonEntity):
             return True
 
         elapsed = (datetime.now() - self._command_sent_time).total_seconds()
-        return elapsed >= self._command_delay
+        available = elapsed >= self._command_delay
+        remaining = max(0, self._command_delay - elapsed)
+        _LOGGER.debug("Button %s availability check: elapsed=%.1f, delay=%d, available=%s, remaining=%.0f",
+                     self._attr_unique_id, elapsed, self._command_delay, available, remaining)
+        return available
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -170,8 +183,11 @@ class SemsPlusControlButton(CoordinatorEntity, ButtonEntity):
         try:
             # Record when command was sent
             self._command_sent_time = datetime.now()
+            _LOGGER.info("Button pressed: device=%s, action=%s, timestamp=%s",
+                        self._device_sn, self._action, self._command_sent_time)
 
             if self._action == "stop":
+                _LOGGER.debug("Sending stop_inverter command: device=%s, plant=%s", self._device_sn, self._plant_id)
                 await self.hass.async_add_executor_job(
                     self.coordinator.client.stop_inverter,
                     self._device_sn,
@@ -179,6 +195,7 @@ class SemsPlusControlButton(CoordinatorEntity, ButtonEntity):
                     self._device_name,
                 )
             elif self._action == "start":
+                _LOGGER.debug("Sending start_inverter command: device=%s, plant=%s", self._device_sn, self._plant_id)
                 await self.hass.async_add_executor_job(
                     self.coordinator.client.start_inverter,
                     self._device_sn,
@@ -186,6 +203,7 @@ class SemsPlusControlButton(CoordinatorEntity, ButtonEntity):
                     self._device_name,
                 )
             elif self._action == "restart":
+                _LOGGER.debug("Sending restart_inverter command: device=%s, plant=%s", self._device_sn, self._plant_id)
                 await self.hass.async_add_executor_job(
                     self.coordinator.client.restart_inverter,
                     self._device_sn,
@@ -202,14 +220,12 @@ class SemsPlusControlButton(CoordinatorEntity, ButtonEntity):
 
             # Schedule refresh after delay instead of immediately
             async def delayed_refresh():
+                _LOGGER.debug("Waiting %d seconds before refreshing status for %s", self._command_delay, self._device_sn)
                 await asyncio.sleep(self._command_delay)
+                _LOGGER.debug("Refreshing status for %s after %ds command delay", self._device_name, self._command_delay)
                 await self.coordinator.async_request_refresh()
-                _LOGGER.debug(
-                    "Refreshing status for %s after %ds command delay",
-                    self._device_name,
-                    self._command_delay,
-                )
 
+            _LOGGER.debug("Scheduling delayed refresh task for %s", self._device_sn)
             self.hass.create_task(delayed_refresh())
 
         except Exception as err:

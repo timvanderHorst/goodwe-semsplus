@@ -31,24 +31,30 @@ class GoodWeSemsPlusConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input: dict | None = None) -> ConfigFlowResult:
         """Handle the initial step."""
+        _LOGGER.debug("Config flow user step started")
         errors = {}
 
         if user_input is not None:
             email = user_input[CONF_EMAIL]
+            _LOGGER.debug("Validating credentials for: %s", email)
             password = user_input[CONF_PASSWORD]
 
             # Validate credentials
             client = SemsPlusClient(email, password)
             try:
+                _LOGGER.debug("Attempting to authenticate with credentials")
                 await self.hass.async_add_executor_job(client.get_user)
-            except SemsPlusAuthError:
+                _LOGGER.debug("Credentials validated successfully")
+            except SemsPlusAuthError as err:
+                _LOGGER.warning("Authentication failed during config: %s", err)
                 errors["base"] = "invalid_auth"
-            except Exception:
-                _LOGGER.exception("Unexpected error during config")
+            except Exception as err:
+                _LOGGER.exception("Unexpected error during config: %s", err)
                 errors["base"] = "unknown"
             else:
                 await self.async_set_unique_id(email)
                 self._abort_if_unique_id_configured()
+                _LOGGER.info("Config entry created for: %s", email)
                 return self.async_create_entry(
                     title=f"SEMS+ ({email})",
                     data=user_input,
@@ -66,16 +72,21 @@ class GoodWeSemsPlusOptionsFlow(OptionsFlow):
 
     async def async_step_init(self, user_input: dict | None = None) -> ConfigFlowResult:
         """Handle options step."""
+        _LOGGER.debug("Options flow init step started")
         if user_input is not None:
+            _LOGGER.debug("Saving options: %s", user_input)
             return self.async_abort_entry_configured()
+
+        current_delay = self.config_entry.options.get(
+            CONF_COMMAND_DELAY, DEFAULT_COMMAND_DELAY
+        )
+        _LOGGER.debug("Current command delay setting: %d seconds", current_delay)
 
         options_schema = vol.Schema(
             {
                 vol.Optional(
                     CONF_COMMAND_DELAY,
-                    default=self.config_entry.options.get(
-                        CONF_COMMAND_DELAY, DEFAULT_COMMAND_DELAY
-                    ),
+                    default=current_delay,
                 ): vol.All(vol.Coerce(int), vol.Range(min=10, max=3600)),
             }
         )
