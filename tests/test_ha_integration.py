@@ -382,6 +382,54 @@ class TestAsyncSetupEntry:
         assert len(entities) == 3  # Only 3 buttons for 1 device
         assert all(entity._device_sn == "DEVICE-001" for entity in entities)
 
+    @pytest.mark.asyncio
+    async def test_setup_uses_api_discovery_when_coordinator_has_no_devices(self):
+        """Test setup falls back to direct API discovery when coordinator has no devices."""
+        mock_coordinator = MagicMock(spec=SemsPlusCoordinator)
+        mock_coordinator.last_update_success = True
+        mock_coordinator.data = {
+            "stations": {
+                "station-1": {
+                    "name": "Station 1",
+                    "info": {"id": "plant-1"},
+                    "devices": [],
+                }
+            }
+        }
+        mock_coordinator.client = MagicMock()
+        mock_coordinator.client.get_stations = MagicMock(
+            return_value=[{"id": "station-1", "stationName": "Station 1"}]
+        )
+        mock_coordinator.client.get_station_info = MagicMock(return_value={"id": "plant-1"})
+        mock_coordinator.client.get_device_status = MagicMock(
+            return_value={
+                "deviceDetailList": [
+                    {"statusDetailList": [{"serialNum": "DEVICE-001", "name": "Inverter 1"}]}
+                ]
+            }
+        )
+
+        mock_hass = MagicMock()
+        mock_hass.data = {DOMAIN: {"entry-123": mock_coordinator}}
+
+        async def run_executor_job(func, *args):
+            return func(*args)
+
+        mock_hass.async_add_executor_job = AsyncMock(side_effect=run_executor_job)
+
+        mock_entry = MagicMock()
+        mock_entry.entry_id = "entry-123"
+        mock_entry.options = {"command_delay_seconds": 30}
+
+        async_add_entities = MagicMock()
+
+        await async_setup_entry(mock_hass, mock_entry, async_add_entities)
+
+        entities = async_add_entities.call_args[0][0]
+        assert len(entities) == 3
+        assert {entity._action for entity in entities} == {"stop", "start", "restart"}
+        assert all(entity._device_sn == "DEVICE-001" for entity in entities)
+
 
 class TestIntegrationSetup:
     """Integration tests for setting up the component with Home Assistant."""

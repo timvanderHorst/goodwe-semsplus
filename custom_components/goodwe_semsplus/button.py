@@ -16,6 +16,52 @@ from .coordinator import SemsPlusCoordinator
 _LOGGER = logging.getLogger(__name__)
 
 
+def _extract_device_sn(device: dict) -> str:
+    """Extract device serial number from known keys."""
+    return (
+        device.get("sn")
+        or device.get("deviceSn")
+        or device.get("serialNum")
+        or device.get("serialNo")
+        or ""
+    )
+
+
+async def _build_station_data_from_api(
+    hass: HomeAssistant, coordinator: SemsPlusCoordinator
+) -> dict[str, dict]:
+    """Build station/device data by querying the API directly."""
+    stations = await hass.async_add_executor_job(coordinator.client.get_stations)
+    rebuilt: dict[str, dict] = {}
+
+    for station in stations:
+        station_id = station.get("id") or station.get("stationId", "")
+        if not station_id:
+            continue
+
+        station_info = await hass.async_add_executor_job(
+            coordinator.client.get_station_info, station_id
+        )
+        device_data = await hass.async_add_executor_job(
+            coordinator.client.get_device_status, station_id
+        )
+
+        devices = []
+        if isinstance(device_data, dict):
+            for detail in device_data.get("deviceDetailList", []):
+                devices.extend(detail.get("statusDetailList", []))
+        elif isinstance(device_data, list):
+            devices = device_data
+
+        rebuilt[station_id] = {
+            "info": station_info,
+            "devices": devices,
+            "name": station.get("stationName", station_id),
+        }
+
+    return rebuilt
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -29,16 +75,32 @@ async def async_setup_entry(
     command_delay = entry.options.get(CONF_COMMAND_DELAY, DEFAULT_COMMAND_DELAY)
     _LOGGER.debug("Command delay configured: %d seconds", command_delay)
 
-    entities: list[ButtonEntity] = []
+    stations_data = coordinator.data.get("stations", {})
+    total_devices = sum(len(station.get("devices", [])) for station in stations_data.values())
+    if total_devices == 0:
+        _LOGGER.warning(
+            "No devices found in coordinator data during button setup; attempting direct API discovery"
+        )
+        try:
+            stations_data = await _build_station_data_from_api(hass, coordinator)
+            total_devices = sum(
+                len(station.get("devices", [])) for station in stations_data.values()
+            )
+            _LOGGER.info("Direct API discovery found %d devices for button setup", total_devices)
+        except Exception as err:
+            _LOGGER.error("Direct API discovery for buttons failed: %s", err, exc_info=True)
 
-    for station_id, station_data in coordinator.data.get("stations", {}).items():
+    entities: list[ButtonEntity] = []
+    seen_unique_ids: set[str] = set()
+
+    for station_id, station_data in stations_data.items():
         station_name = station_data.get("name", station_id)
         _LOGGER.debug("Processing station: %s (%s)", station_id, station_name)
 
         # Device-level control buttons (inverters)
         for device in station_data.get("devices", []):
-            device_sn = device.get("sn", device.get("deviceSn", ""))
-            device_name = device.get("deviceName", device_sn)
+            device_sn = _extract_device_sn(device)
+            device_name = device.get("name") or device.get("deviceName") or device_sn
 
             if not device_sn:
                 _LOGGER.debug("Skipping device without serial number: %s", device_name)
@@ -46,7 +108,12 @@ async def async_setup_entry(
 
             # Get plant_id from station info
             station_info = station_data.get("info", {})
-            plant_id = station_info.get("id") or station_info.get("stationId", station_id)
+            plant_id = (
+                station_info.get("id")
+                or station_info.get("stationId")
+                or station_info.get("plantId")
+                or station_id
+            )
             _LOGGER.debug(
                 "Creating buttons for device: %s (sn=%s, plant_id=%s)",
                 device_name,
@@ -54,47 +121,24 @@ async def async_setup_entry(
                 plant_id,
             )
 
-            # Create stop button
-            entities.append(
-                SemsPlusControlButton(
-                    coordinator=coordinator,
-                    station_id=station_id,
-                    station_name=station_name,
-                    device_sn=device_sn,
-                    device_name=device_name,
-                    plant_id=plant_id,
-                    action="stop",
-                    command_delay=command_delay,
-                )
-            )
+            for action in ("stop", "start", "restart"):
+                unique_id = f"{device_sn}_{action}"
+                if unique_id in seen_unique_ids:
+                    continue
+                seen_unique_ids.add(unique_id)
 
-            # Create start button
-            entities.append(
-                SemsPlusControlButton(
-                    coordinator=coordinator,
-                    station_id=station_id,
-                    station_name=station_name,
-                    device_sn=device_sn,
-                    device_name=device_name,
-                    plant_id=plant_id,
-                    action="start",
-                    command_delay=command_delay,
+                entities.append(
+                    SemsPlusControlButton(
+                        coordinator=coordinator,
+                        station_id=station_id,
+                        station_name=station_name,
+                        device_sn=device_sn,
+                        device_name=device_name,
+                        plant_id=plant_id,
+                        action=action,
+                        command_delay=command_delay,
+                    )
                 )
-            )
-
-            # Create restart button
-            entities.append(
-                SemsPlusControlButton(
-                    coordinator=coordinator,
-                    station_id=station_id,
-                    station_name=station_name,
-                    device_sn=device_sn,
-                    device_name=device_name,
-                    plant_id=plant_id,
-                    action="restart",
-                    command_delay=command_delay,
-                )
-            )
 
     _LOGGER.debug("Adding %d button entities to Home Assistant", len(entities))
     async_add_entities(entities)
