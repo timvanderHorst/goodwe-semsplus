@@ -404,7 +404,22 @@ class TestAsyncSetupEntry:
         mock_coordinator.client.get_device_status = MagicMock(
             return_value={
                 "deviceDetailList": [
-                    {"statusDetailList": [{"serialNum": "DEVICE-001", "name": "Inverter 1"}]}
+                    {
+                        "deviceType": "INVERTER",
+                        "statusDetailList": [
+                            {
+                                "status": 1,
+                                "snList": ["DEVICE-001"],
+                                "detailMap": {
+                                    "DEVICE-001": {
+                                        "sn": "DEVICE-001",
+                                        "name": "Inverter 1",
+                                        "deviceType": "INVERTER",
+                                    }
+                                },
+                            }
+                        ],
+                    }
                 ]
             }
         )

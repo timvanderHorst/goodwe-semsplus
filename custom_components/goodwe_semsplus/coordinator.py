@@ -12,6 +12,26 @@ from .const import DOMAIN, SCAN_INTERVAL_SECONDS
 _LOGGER = logging.getLogger(__name__)
 
 
+def _extract_devices(device_data: dict) -> list[dict]:
+    """Extract per-device records from SEMS+ grouped device status payload."""
+    devices: list[dict] = []
+
+    for detail in device_data.get("deviceDetailList", []):
+        for status_group in detail.get("statusDetailList", []):
+            detail_map = status_group.get("detailMap", {})
+            if not isinstance(detail_map, dict):
+                continue
+            status_value = status_group.get("status")
+            for value in detail_map.values():
+                if not isinstance(value, dict):
+                    continue
+                if status_value is not None and "status" not in value:
+                    value = {**value, "status": status_value}
+                devices.append(value)
+
+    return devices
+
+
 class SemsPlusCoordinator(DataUpdateCoordinator):
     """Coordinator to fetch data from SEMS+ API."""
 
@@ -39,7 +59,7 @@ class SemsPlusCoordinator(DataUpdateCoordinator):
             data = {"stations": {}}
 
             for station in stations:
-                station_id = station.get("id") or station.get("stationId", "")
+                station_id = station.get("id", "")
                 if not station_id:
                     _LOGGER.debug("Skipping station without ID: %s", station)
                     continue
@@ -47,6 +67,10 @@ class SemsPlusCoordinator(DataUpdateCoordinator):
                 _LOGGER.debug("Processing station: %s", station_id)
                 station_info = await self.hass.async_add_executor_job(
                     self.client.get_station_info, station_id
+                )
+
+                station_flow = await self.hass.async_add_executor_job(
+                    self.client.get_station_flow, station_id
                 )
                 _LOGGER.debug(
                     "Retrieved station info for %s: %s",
@@ -63,20 +87,23 @@ class SemsPlusCoordinator(DataUpdateCoordinator):
                     "Retrieved device data for %s: type=%s", station_id, type(device_data)
                 )
 
-                # Extract device list from nested response
-                devices = []
-                if isinstance(device_data, dict):
-                    for detail in device_data.get("deviceDetailList", []):
-                        for dev in detail.get("statusDetailList", []):
-                            devices.append(dev)
-                elif isinstance(device_data, list):
-                    devices = device_data
+                # SEMS+ response groups device details under detailMap keyed by serial number.
+                devices = _extract_devices(device_data if isinstance(device_data, dict) else {})
 
-                _LOGGER.debug("Station %s has %d devices", station_id, len(devices))
+                if devices:
+                    _LOGGER.debug(
+                        "Station %s has %d devices. First device keys: %s",
+                        station_id,
+                        len(devices),
+                        list(devices[0].keys()) if isinstance(devices[0], dict) else "N/A",
+                    )
+                else:
+                    _LOGGER.debug("Station %s has %d devices", station_id, len(devices))
                 data["stations"][station_id] = {
                     "info": station_info,
+                    "flow": station_flow,
                     "devices": devices,
-                    "name": station.get("stationName", station_id),
+                    "name": station.get("name", station_id),
                 }
 
             _LOGGER.info(

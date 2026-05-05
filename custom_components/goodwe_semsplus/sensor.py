@@ -77,8 +77,10 @@ async def async_setup_entry(
 
         # Device-level sensors (inverters)
         for device in station_data.get("devices", []):
-            device_sn = device.get("sn", device.get("deviceSn", ""))
-            device_name = device.get("name", device.get("deviceName", device_sn))
+            device_sn = device.get("sn", "")
+            if not device_sn:
+                continue
+            device_name = device.get("name") or device_sn
             entities.append(
                 SemsPlusDeviceStatusSensor(
                     coordinator=coordinator,
@@ -119,20 +121,25 @@ class SemsPlusStationSensor(CoordinatorEntity, SensorEntity):
     def native_value(self):
         """Return the sensor value."""
         station = self.coordinator.data.get("stations", {}).get(self._station_id, {})
-        info = station.get("info", {})
-        # Try nested paths common in SEMS+ responses
-        value = info.get(self._key)
-        if value is None and isinstance(info, dict):
-            for sub in info.values():
-                if isinstance(sub, dict) and self._key in sub:
-                    value = sub[self._key]
-                    break
-        if value is not None:
+
+        if self._key == "pac":
+            flow = station.get("flow", {})
+            pac_kw = flow.get("pAc")
+            if pac_kw is None:
+                return None
             try:
-                return float(value)
+                return float(pac_kw) * 1000
             except (ValueError, TypeError):
-                return value
-        return None
+                return None
+
+        info = station.get("info", {})
+        value = info.get(self._key)
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return None
 
 
 class SemsPlusDeviceStatusSensor(CoordinatorEntity, SensorEntity):
@@ -162,8 +169,8 @@ class SemsPlusDeviceStatusSensor(CoordinatorEntity, SensorEntity):
         """Return device status."""
         station = self.coordinator.data.get("stations", {}).get(self._station_id, {})
         for device in station.get("devices", []):
-            sn = device.get("sn", device.get("deviceSn", ""))
+            sn = device.get("sn", "")
             if sn == self._device_sn:
-                status = device.get("status", device.get("deviceStatus", "unknown"))
+                status = device.get("status", "unknown")
                 return DEVICE_STATUS_MAP.get(status, str(status))
         return "unknown"

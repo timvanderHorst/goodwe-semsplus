@@ -11,7 +11,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONF_COMMAND_DELAY, DEFAULT_COMMAND_DELAY, DOMAIN
-from .coordinator import SemsPlusCoordinator
+from .coordinator import SemsPlusCoordinator, _extract_devices
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,17 +46,12 @@ async def _build_station_data_from_api(
             coordinator.client.get_device_status, station_id
         )
 
-        devices = []
-        if isinstance(device_data, dict):
-            for detail in device_data.get("deviceDetailList", []):
-                devices.extend(detail.get("statusDetailList", []))
-        elif isinstance(device_data, list):
-            devices = device_data
+        devices = _extract_devices(device_data if isinstance(device_data, dict) else {})
 
         rebuilt[station_id] = {
             "info": station_info,
             "devices": devices,
-            "name": station.get("stationName", station_id),
+            "name": station.get("name", station_id),
         }
 
     return rebuilt
@@ -103,7 +98,12 @@ async def async_setup_entry(
             device_name = device.get("name") or device.get("deviceName") or device_sn
 
             if not device_sn:
-                _LOGGER.info("Skipping device without serial number: %s", device_name)
+                device_keys = list(device.keys()) if isinstance(device, dict) else []
+                _LOGGER.info(
+                    "Skipping device without serial number. Device keys: %s. Full device: %s",
+                    device_keys,
+                    device,
+                )
                 continue
 
             # Get plant_id from station info

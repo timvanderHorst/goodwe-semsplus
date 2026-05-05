@@ -24,6 +24,7 @@ async def test_sensor_async_setup_entry_creates_entities():
         "stations": {
             "station-1": {
                 "name": "Main Station",
+                "flow": {"pAc": 1.0},
                 "info": {"pac": 1000, "eDay": 5.5, "eMonth": 120, "eTotal": 2500},
                 "devices": [
                     {"sn": "INV-001", "deviceName": "Inverter 1", "status": 1},
@@ -49,15 +50,14 @@ async def test_sensor_async_setup_entry_creates_entities():
     assert len(entities) == len(STATION_SENSORS) + 2
 
 
-def test_station_sensor_native_value_from_nested_info():
-    """Test station sensor can read value from nested info dict."""
+def test_station_sensor_native_value_from_flow_power_kw_to_watt():
+    """Test station power sensor uses flow.pAc and converts kW to W."""
     coordinator = MagicMock()
     coordinator.data = {
         "stations": {
             "station-1": {
-                "info": {
-                    "summary": {"pac": "1234.5"},
-                }
+                "flow": {"pAc": "1.2345"},
+                "info": {},
             }
         }
     }
@@ -72,8 +72,8 @@ def test_station_sensor_native_value_from_nested_info():
     assert sensor.native_value == 1234.5
 
 
-def test_station_sensor_native_value_non_numeric_falls_back_to_raw():
-    """Test station sensor returns raw value when not numeric."""
+def test_station_sensor_native_value_non_numeric_returns_none():
+    """Test station non-numeric values are treated as unavailable."""
     coordinator = MagicMock()
     coordinator.data = {
         "stations": {
@@ -92,7 +92,7 @@ def test_station_sensor_native_value_non_numeric_falls_back_to_raw():
         sensor_def=STATION_SENSORS[0],
     )
 
-    assert sensor.native_value == "n/a"
+    assert sensor.native_value is None
 
 
 def test_device_status_sensor_maps_status_and_unknown():
