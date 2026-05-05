@@ -25,20 +25,23 @@ from custom_components.goodwe_semsplus.const import (
 class TestOptionsFlow:
     """Tests for options flow behavior."""
 
-    def test_async_get_options_flow_accepts_config_entry(self):
+    async def test_async_get_options_flow_accepts_config_entry(self, hass):
         """Ensure options flow can be created with a config entry argument."""
         entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
+        entry.add_to_hass(hass)
 
         flow = GoodWeSemsPlusConfigFlow.async_get_options_flow(entry)
 
         assert isinstance(flow, GoodWeSemsPlusOptionsFlow)
-        assert flow.config_entry is entry
 
     @pytest.mark.asyncio
-    async def test_options_flow_shows_form_with_default_delay(self):
+    async def test_options_flow_shows_form_with_default_delay(self, hass):
         """Ensure options form opens with default command delay when unset."""
         entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
-        flow = GoodWeSemsPlusOptionsFlow(entry)
+        entry.add_to_hass(hass)
+        flow = GoodWeSemsPlusConfigFlow.async_get_options_flow(entry)
+        flow.hass = hass
+        flow.handler = entry.entry_id
 
         result = await flow.async_step_init(user_input=None)
 
@@ -46,14 +49,17 @@ class TestOptionsFlow:
         assert result["step_id"] == "init"
 
     @pytest.mark.asyncio
-    async def test_options_flow_saves_delay(self):
+    async def test_options_flow_saves_delay(self, hass):
         """Ensure options flow saves command delay to options entry."""
         entry = MockConfigEntry(
             domain=DOMAIN,
             data={},
             options={CONF_COMMAND_DELAY: DEFAULT_COMMAND_DELAY},
         )
-        flow = GoodWeSemsPlusOptionsFlow(entry)
+        entry.add_to_hass(hass)
+        flow = GoodWeSemsPlusConfigFlow.async_get_options_flow(entry)
+        flow.hass = hass
+        flow.handler = entry.entry_id
 
         result = await flow.async_step_init(user_input={CONF_COMMAND_DELAY: 120})
 
@@ -61,10 +67,13 @@ class TestOptionsFlow:
         assert result["data"] == {CONF_COMMAND_DELAY: 120}
 
     @pytest.mark.asyncio
-    async def test_options_flow_step_user_with_input_creates_entry(self):
+    async def test_options_flow_step_user_with_input_creates_entry(self, hass):
         """Ensure async_step_user saves provided options."""
         entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
-        flow = GoodWeSemsPlusOptionsFlow(entry)
+        entry.add_to_hass(hass)
+        flow = GoodWeSemsPlusConfigFlow.async_get_options_flow(entry)
+        flow.hass = hass
+        flow.handler = entry.entry_id
 
         result = await flow.async_step_user(user_input={CONF_COMMAND_DELAY: 60})
 
@@ -72,10 +81,13 @@ class TestOptionsFlow:
         assert result["data"] == {CONF_COMMAND_DELAY: 60}
 
     @pytest.mark.asyncio
-    async def test_options_flow_step_user_without_input_shows_form(self):
+    async def test_options_flow_step_user_without_input_shows_form(self, hass):
         """Ensure async_step_user delegates to init form when no input."""
         entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
-        flow = GoodWeSemsPlusOptionsFlow(entry)
+        entry.add_to_hass(hass)
+        flow = GoodWeSemsPlusConfigFlow.async_get_options_flow(entry)
+        flow.hass = hass
+        flow.handler = entry.entry_id
 
         result = await flow.async_step_user(user_input=None)
 

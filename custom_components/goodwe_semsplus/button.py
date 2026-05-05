@@ -68,12 +68,12 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up SEMS+ buttons from a config entry."""
-    _LOGGER.debug("Setting up SEMS+ button platform for entry: %s", entry.entry_id)
+    _LOGGER.info("Setting up SEMS+ button platform for entry: %s", entry.entry_id)
     coordinator: SemsPlusCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     # Get command delay from options or use default
     command_delay = entry.options.get(CONF_COMMAND_DELAY, DEFAULT_COMMAND_DELAY)
-    _LOGGER.debug("Command delay configured: %d seconds", command_delay)
+    _LOGGER.info("Command delay configured: %d seconds", command_delay)
 
     stations_data = coordinator.data.get("stations", {})
     total_devices = sum(len(station.get("devices", [])) for station in stations_data.values())
@@ -95,7 +95,7 @@ async def async_setup_entry(
 
     for station_id, station_data in stations_data.items():
         station_name = station_data.get("name", station_id)
-        _LOGGER.debug("Processing station: %s (%s)", station_id, station_name)
+        _LOGGER.info("Processing station: %s (%s)", station_id, station_name)
 
         # Device-level control buttons (inverters)
         for device in station_data.get("devices", []):
@@ -103,7 +103,7 @@ async def async_setup_entry(
             device_name = device.get("name") or device.get("deviceName") or device_sn
 
             if not device_sn:
-                _LOGGER.debug("Skipping device without serial number: %s", device_name)
+                _LOGGER.info("Skipping device without serial number: %s", device_name)
                 continue
 
             # Get plant_id from station info
@@ -114,7 +114,7 @@ async def async_setup_entry(
                 or station_info.get("plantId")
                 or station_id
             )
-            _LOGGER.debug(
+            _LOGGER.info(
                 "Creating buttons for device: %s (sn=%s, plant_id=%s)",
                 device_name,
                 device_sn,
@@ -171,7 +171,7 @@ class SemsPlusControlButton(CoordinatorEntity, ButtonEntity):
         self._action = action
         self._command_delay = command_delay
         self._command_sent_time: datetime | None = None
-        _LOGGER.debug(
+        _LOGGER.info(
             "Initializing button: device=%s, action=%s, delay=%d", device_sn, action, command_delay
         )
 
@@ -184,7 +184,7 @@ class SemsPlusControlButton(CoordinatorEntity, ButtonEntity):
         action_title = action.capitalize()
         self._attr_name = f"{device_name} {action_title}"
         self._attr_unique_id = f"{device_sn}_{action}"
-        _LOGGER.debug(
+        _LOGGER.info(
             "Button entity created: unique_id=%s, name=%s", self._attr_unique_id, self._attr_name
         )
 

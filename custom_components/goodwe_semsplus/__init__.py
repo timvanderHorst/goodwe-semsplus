@@ -24,18 +24,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         email=entry.data[CONF_EMAIL],
         password=entry.data[CONF_PASSWORD],
     )
-    _LOGGER.debug("SemsPlusClient created")
+    _LOGGER.info("SemsPlusClient created")
 
     coordinator = SemsPlusCoordinator(hass, client)
-    _LOGGER.debug("Performing initial coordinator refresh")
+    _LOGGER.info("Performing initial coordinator refresh")
     await coordinator.async_config_entry_first_refresh()
-    _LOGGER.debug("Initial coordinator refresh complete")
+    _LOGGER.info("Initial coordinator refresh complete")
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
-    _LOGGER.debug("Coordinator registered in hass.data")
+    _LOGGER.info("Coordinator registered in hass.data")
 
-    _LOGGER.debug("Setting up platforms: %s", PLATFORMS)
+    _LOGGER.info("Setting up platforms: %s", PLATFORMS)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _LOGGER.debug("Platforms setup complete")
 

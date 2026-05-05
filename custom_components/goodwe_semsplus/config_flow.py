@@ -27,7 +27,7 @@ class GoodWeSemsPlusConfigFlow(ConfigFlow, domain=DOMAIN):
     @staticmethod
     def async_get_options_flow(config_entry):
         """Return options flow."""
-        return GoodWeSemsPlusOptionsFlow(config_entry)
+        return GoodWeSemsPlusOptionsFlow()
 
     async def async_step_user(self, user_input: dict | None = None) -> ConfigFlowResult:
         """Handle the initial step."""
@@ -36,15 +36,15 @@ class GoodWeSemsPlusConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             email = user_input[CONF_EMAIL]
-            _LOGGER.debug("Validating credentials for: %s", email)
+            _LOGGER.info("Validating credentials for: %s", email)
             password = user_input[CONF_PASSWORD]
 
             # Validate credentials
             client = SemsPlusClient(email, password)
             try:
-                _LOGGER.debug("Attempting to authenticate with credentials")
+                _LOGGER.info("Attempting to authenticate with credentials")
                 await self.hass.async_add_executor_job(client.get_user)
-                _LOGGER.debug("Credentials validated successfully")
+                _LOGGER.info("Credentials validated successfully")
             except SemsPlusAuthError as err:
                 _LOGGER.warning("Authentication failed during config: %s", err)
                 errors["base"] = "invalid_auth"
@@ -69,10 +69,6 @@ class GoodWeSemsPlusConfigFlow(ConfigFlow, domain=DOMAIN):
 
 class GoodWeSemsPlusOptionsFlow(OptionsFlow):
     """Handle options for GoodWe SEMS+."""
-
-    def __init__(self, config_entry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
 
     async def async_step_init(self, user_input: dict | None = None) -> ConfigFlowResult:
         """Handle options step."""

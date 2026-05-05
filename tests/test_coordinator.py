@@ -13,7 +13,7 @@ from custom_components.goodwe_semsplus.coordinator import SemsPlusCoordinator
 
 
 @pytest.mark.asyncio
-async def test_coordinator_update_data_success_nested_devices():
+async def test_coordinator_update_data_success_nested_devices(hass):
     """Test coordinator update builds normalized station/device structure."""
     client = MagicMock()
     client.get_stations = MagicMock(
@@ -36,8 +36,6 @@ async def test_coordinator_update_data_success_nested_devices():
         }
     )
 
-    hass = MagicMock()
-
     async def run_executor_job(func, *args):
         return func(*args)
 
@@ -54,12 +52,10 @@ async def test_coordinator_update_data_success_nested_devices():
 
 
 @pytest.mark.asyncio
-async def test_coordinator_update_data_auth_error_raises_updatefailed():
+async def test_coordinator_update_data_auth_error_raises_updatefailed(hass):
     """Test auth errors are wrapped as UpdateFailed."""
     client = MagicMock()
     client.get_stations = MagicMock(side_effect=SemsPlusAuthError("bad credentials"))
-
-    hass = MagicMock()
 
     async def run_executor_job(func, *args):
         return func(*args)
@@ -73,12 +69,10 @@ async def test_coordinator_update_data_auth_error_raises_updatefailed():
 
 
 @pytest.mark.asyncio
-async def test_coordinator_update_data_api_error_raises_updatefailed():
+async def test_coordinator_update_data_api_error_raises_updatefailed(hass):
     """Test API errors are wrapped as UpdateFailed."""
     client = MagicMock()
     client.get_stations = MagicMock(side_effect=SemsPlusApiError("api unavailable"))
-
-    hass = MagicMock()
 
     async def run_executor_job(func, *args):
         return func(*args)
