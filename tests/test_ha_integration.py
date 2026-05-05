@@ -19,11 +19,18 @@ from custom_components.goodwe_semsplus.const import DOMAIN
 from custom_components.goodwe_semsplus.coordinator import SemsPlusCoordinator
 
 
+def mock_create_task(coro):
+    """Mock create_task that properly closes coroutines to avoid warnings."""
+    coro.close()  # Close to avoid ResourceWarning about unawaited coroutine
+    return MagicMock()
+
+
 @pytest.fixture
 def mock_hass():
     """Create a mock Home Assistant instance."""
     hass = MagicMock()
     hass.async_add_executor_job = AsyncMock()
+    hass.create_task = MagicMock(side_effect=mock_create_task)
     return hass
 
 
@@ -86,6 +93,7 @@ class TestSemsPlusControlButton:
             device_name="SolarGoodwe",
             plant_id="plant-123",
             action="stop",
+            command_delay=30,
         )
 
         assert button._action == "stop"
@@ -105,6 +113,7 @@ class TestSemsPlusControlButton:
             device_name="SolarGoodwe",
             plant_id="plant-123",
             action="start",
+            command_delay=30,
         )
 
         assert button._action == "start"
@@ -121,6 +130,7 @@ class TestSemsPlusControlButton:
             device_name="SolarGoodwe",
             plant_id="plant-123",
             action="restart",
+            command_delay=30,
         )
 
         assert button._action == "restart"
@@ -137,6 +147,7 @@ class TestSemsPlusControlButton:
             device_name="SolarGoodwe",
             plant_id="plant-123",
             action="stop",
+            command_delay=30,
         )
 
         device_info = button.device_info
@@ -157,11 +168,13 @@ class TestSemsPlusControlButton:
             device_name="SolarGoodwe",
             plant_id="plant-123",
             action="stop",
+            command_delay=30,
         )
 
         # Mock the hass executor
         mock_hass = MagicMock()
         mock_hass.async_add_executor_job = AsyncMock(return_value={"code": "00000"})
+        mock_hass.create_task = MagicMock(side_effect=mock_create_task)
         button.hass = mock_hass
 
         await button.async_press()
@@ -174,8 +187,8 @@ class TestSemsPlusControlButton:
             "SolarGoodwe",
         )
 
-        # Verify coordinator refresh was called
-        mock_coordinator.async_request_refresh.assert_called_once()
+        # Verify create_task was called for delayed refresh
+        assert mock_hass.create_task.called
 
     @pytest.mark.asyncio
     async def test_button_press_start(self, mock_coordinator):
@@ -188,11 +201,13 @@ class TestSemsPlusControlButton:
             device_name="SolarGoodwe",
             plant_id="plant-123",
             action="start",
+            command_delay=30,
         )
 
         # Mock the hass executor
         mock_hass = MagicMock()
         mock_hass.async_add_executor_job = AsyncMock(return_value={"code": "00000"})
+        mock_hass.create_task = MagicMock(side_effect=mock_create_task)
         button.hass = mock_hass
 
         await button.async_press()
@@ -205,8 +220,8 @@ class TestSemsPlusControlButton:
             "SolarGoodwe",
         )
 
-        # Verify coordinator refresh was called
-        mock_coordinator.async_request_refresh.assert_called_once()
+        # Verify create_task was called for delayed refresh
+        assert mock_hass.create_task.called
 
     @pytest.mark.asyncio
     async def test_button_press_restart(self, mock_coordinator):
@@ -219,11 +234,13 @@ class TestSemsPlusControlButton:
             device_name="SolarGoodwe",
             plant_id="plant-123",
             action="restart",
+            command_delay=30,
         )
 
         # Mock the hass executor
         mock_hass = MagicMock()
         mock_hass.async_add_executor_job = AsyncMock(return_value={"code": "00000"})
+        mock_hass.create_task = MagicMock(side_effect=mock_create_task)
         button.hass = mock_hass
 
         await button.async_press()
@@ -236,8 +253,8 @@ class TestSemsPlusControlButton:
             "SolarGoodwe",
         )
 
-        # Verify coordinator refresh was called
-        mock_coordinator.async_request_refresh.assert_called_once()
+        # Verify create_task was called for delayed refresh
+        assert mock_hass.create_task.called
 
     @pytest.mark.asyncio
     async def test_button_press_error_handling(self, mock_coordinator):
@@ -250,6 +267,7 @@ class TestSemsPlusControlButton:
             device_name="SolarGoodwe",
             plant_id="plant-123",
             action="stop",
+            command_delay=30,
         )
 
         # Mock the hass executor to raise an error
@@ -275,6 +293,7 @@ class TestAsyncSetupEntry:
 
         mock_entry = MagicMock()
         mock_entry.entry_id = "entry-123"
+        mock_entry.options = {"command_delay_seconds": 30}
 
         async_add_entities = MagicMock()  # Not async - HA's add_entities is sync
 
@@ -321,6 +340,7 @@ class TestAsyncSetupEntry:
 
         mock_entry = MagicMock()
         mock_entry.entry_id = "entry-123"
+        mock_entry.options = {"command_delay_seconds": 30}
 
         async_add_entities = MagicMock()  # Not async
 
@@ -353,6 +373,7 @@ class TestAsyncSetupEntry:
 
         mock_entry = MagicMock()
         mock_entry.entry_id = "entry-123"
+        mock_entry.options = {"command_delay_seconds": 30}
 
         async_add_entities = MagicMock()  # Not async
 
@@ -403,6 +424,7 @@ class TestIntegrationSetup:
             device_name="SolarGoodwe",
             plant_id="plant-123",
             action="stop",
+            command_delay=30,
         )
 
         button_start = SemsPlusControlButton(
@@ -413,6 +435,7 @@ class TestIntegrationSetup:
             device_name="SolarGoodwe",
             plant_id="plant-123",
             action="start",
+            command_delay=30,
         )
 
         button_restart = SemsPlusControlButton(
@@ -423,6 +446,7 @@ class TestIntegrationSetup:
             device_name="SolarGoodwe",
             plant_id="plant-123",
             action="restart",
+            command_delay=30,
         )
 
         # Verify all unique IDs are different
@@ -447,6 +471,7 @@ class TestIntegrationSetup:
             device_name="SolarGoodwe",
             plant_id="plant-123",
             action="stop",
+            command_delay=30,
         )
 
         # Verify coordinator is accessible
@@ -466,6 +491,7 @@ class TestIntegrationSetup:
             device_name="SolarGoodwe",
             plant_id="plant-123",
             action="stop",
+            command_delay=30,
         )
 
         # Verify entity attributes
@@ -482,5 +508,6 @@ class TestIntegrationSetup:
             device_name="SolarGoodwe",
             plant_id="plant-123",
             action="restart",
+            command_delay=30,
         )
         assert button_restart._attr_device_class is not None

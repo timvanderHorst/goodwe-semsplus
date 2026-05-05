@@ -3,11 +3,11 @@
 import logging
 
 import voluptuous as vol
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 
 from .api import SemsPlusAuthError, SemsPlusClient
-from .const import DOMAIN
+from .const import CONF_COMMAND_DELAY, DEFAULT_COMMAND_DELAY, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,6 +23,11 @@ class GoodWeSemsPlusConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for GoodWe SEMS+."""
 
     VERSION = 1
+
+    @staticmethod
+    def async_get_options_flow(config_entry):
+        """Return options flow."""
+        return GoodWeSemsPlusOptionsFlow(config_entry)
 
     async def async_step_user(self, user_input: dict | None = None) -> ConfigFlowResult:
         """Handle the initial step."""
@@ -54,3 +59,32 @@ class GoodWeSemsPlusConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=DATA_SCHEMA,
             errors=errors,
         )
+
+
+class GoodWeSemsPlusOptionsFlow(OptionsFlow):
+    """Handle options for GoodWe SEMS+."""
+
+    async def async_step_init(self, user_input: dict | None = None) -> ConfigFlowResult:
+        """Handle options step."""
+        if user_input is not None:
+            return self.async_abort_entry_configured()
+
+        options_schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_COMMAND_DELAY,
+                    default=self.config_entry.options.get(
+                        CONF_COMMAND_DELAY, DEFAULT_COMMAND_DELAY
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=10, max=3600)),
+            }
+        )
+
+        return self.async_show_form(step_id="init", data_schema=options_schema)
+
+    async def async_step_user(self, user_input: dict | None = None) -> ConfigFlowResult:
+        """Handle options step with user input."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        return await self.async_step_init()
