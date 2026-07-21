@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Pin workflow action versions
-        uses: sethvargo/ratchet@v0.11.4
+        uses: sethvargo/ratchet@v0.12.0
         with:
           files: |
             .github/workflows/*.yml
